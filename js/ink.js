@@ -2,7 +2,7 @@ var gl;
 var advecProgram;
 var forceProgram;
 var densityProgram;
-var divProgram;
+var changeVelocityProgram;
 var renderProgram
 var frameBuffer1;
 var frameBuffer2;
@@ -38,7 +38,7 @@ function init () {
       vertexSource : shaders.vertex
     });
     
-    divProgram  = createProgram( {
+    changeVelocityProgram  = createProgram( {
       fragmentSource : shaders.div_frag, 
       vertexSource : shaders.vertex
     });
@@ -57,7 +57,7 @@ function init () {
     forceProgram.forceLoc      = gl.getUniformLocation(forceProgram, "force");
     advecProgram.aPosLoc       = gl.getAttribLocation(advecProgram, "aPos");
     advecProgram.aTextCoordLoc = gl.getAttribLocation(advecProgram, "aTexCoord");
-    divProgram.sampLoc     = gl.getUniformLocation(divProgram, "samp");
+    changeVelocityProgram.sampLoc     = gl.getUniformLocation(changeVelocityProgram, "samp");
     advecProgram.sampLoc   = gl.getUniformLocation(advecProgram, "samp");
     densityProgram.sampLoc = gl.getUniformLocation(densityProgram, "samp");
 
@@ -69,8 +69,8 @@ function init () {
     gl.useProgram(forceProgram);
     gl.uniform1f(forceProgram.forceLoc, .001*.5*-10 );
 
-    gl.useProgram(divProgram);
-    gl.uniform1i(divProgram.sampLoc, 1);
+    gl.useProgram(changeVelocityProgram);
+    gl.uniform1i(changeVelocityProgram.sampLoc, 1);
 
 
     gl.useProgram(advecProgram);
@@ -154,7 +154,7 @@ function draw(){
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer1);
-  gl.useProgram(divProgram);
+  gl.useProgram(changeVelocityProgram);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
   gl.useProgram(renderProgram);

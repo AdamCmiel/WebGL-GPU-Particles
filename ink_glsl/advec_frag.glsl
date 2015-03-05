@@ -5,16 +5,15 @@ const float h = 1./512., dt = .001, tau = .5*dt/h;
 
 void main(void) {
   vec4 t = texture2D(samp, tc);
-  vec4 left = texture2D(samp, vec2(tc.x - h, tc.y));
-  vec4 below = texture2D(samp, vec2(tc.x, tc.y - h));
+  vec4 left = texture2D(samp, vec2(tc.x, tc.y));
+  vec4 below = texture2D(samp, vec2(tc.x, tc.y));
   vec2 D = -tau * vec2(t.x + left.x, t.y + below.y);
   vec2 Df = floor(D);
   vec2 Dd = D - Df;
   vec2 tc1 = tc + Df * h;
   vec3 new =  
-     (texture2D(samp, tc1).xyz * (1. - Dd.y) + texture2D(samp, vec2(tc1.x, tc1.y + h)).xyz * Dd.y)*(1. - Dd.x) +
-     (texture2D(samp, vec2(tc1.x + h, tc1.y)).xyz*(1. - Dd.y) + texture2D(samp, vec2(tc1.x + h, tc1.y + h)).xyz*Dd.y)*Dd.x;
+     (texture2D(samp, tc1).xyz * (1. - Dd.y) + texture2D(samp, vec2(tc1.x, tc1.y)).xyz * Dd.y)*(1. - Dd.x) +
+     (texture2D(samp, vec2(tc1.x, tc1.y)).xyz*(1. - Dd.y) + texture2D(samp, vec2(tc1.x + h, tc1.y + h)).xyz*Dd.y)*Dd.x;
    
    gl_FragColor = vec4( new, t.w );
-   // gl_FragColor = t;
 }
