@@ -467,7 +467,10 @@ gl.mousemove = function() {
             // Convert mouse screen coordinates into clipspace coordinates
             x = map( touch.x, 0, gl.width, -1, 1 );
             y = map( touch.y, 0, gl.height, 1, -1 );
-
+// map: function( num, minA, maxA, minB, maxB ) {
+// touchX / 512
+//                         return ( num - minA ) / ( maxA - minA ) * ( maxB - minB ) + minB;
+//                     }
             // Emit some particles!
             emitParticles( limit, {
                 x: x,
