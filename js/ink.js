@@ -1,11 +1,16 @@
-
-var gl, prog_advec, prog_force, prog_p, prog_div, prog_show,
-    FBO, FBO1, texture, texture1,
-    timer, delay = 0, it = 10, frames = 0, time, animation,
-    n = 512, sampLoc;
-
+var gl; 
+var advecProgram;
+var forceProgram;
+var densityProgram;
+var divProgram;
+var renderProgram
+var frameBuffer1;
+var frameBuffer2;
+var texture1;
+var texture2;
+var it = 3;
+var n = 512;
 var ext;
-
 var shaders = {
   advec_frag: '',
   density_frag: '',
@@ -15,198 +20,134 @@ var shaders = {
   vertex: ''
 };
 
-var gl = Sketch.create({
-  // element : document.body,
-  type: Sketch.WEBGL,
-  autostart: false
-});
-
-// TODO embed a video for non-WebGL enabled browsers
-if ( !gl ) {
-    alert( 'WebGL not detected' );
-}
-
-gl.setup = function() {
+function init () {
   loadShaders(function() {
+    var canvas = document.getElementById("canvas");
+    gl = canvas.getContext("webgl");
+    ext = gl.getExtension("OES_texture_float");
+    if (!gl || !ext) { alert("Error"); return; }
 
-    // var canvas = document.getElementById("canvas");
-    // var err = "Your browser does not support ";
-    // gl = canvas.getContext("webgl");
-    // ext = gl.getExtension("OES_texture_float");
-    
-    // if (!gl || !ext){
-    //   alert(err+"WebGL. See http://get.webgl.org");
-    //   return;
-    // }
+    console.log('loaded shaders')
+    //create programs
+    forceProgram = createProgram(shaders.force_frag, shaders.vertex);
+    densityProgram  = createProgram( shaders.density_frag, shaders.vertex );
+    divProgram  = createProgram( shaders.div_frag, shaders.vertex );
+    renderProgram  = createProgram( shaders.render_frag, shaders.vertex );
+    advecProgram  = createProgram( shaders.advec_frag, shaders.vertex );
 
-     prog_force = createProgram(shaders.force_frag, shaders.vertex);
-     gl.useProgram(prog_force);
-     gl.uniform1f(gl.getUniformLocation(prog_force, "force"), .001*.5*2 );
+     //get uniforms
+     forceProgram.forceLoc      = gl.getUniformLocation(forceProgram, "force");
+     advecProgram.aPosLoc       = gl.getAttribLocation(advecProgram, "aPos");
+     advecProgram.aTextCoordLoc = gl.getAttribLocation(advecProgram, "aTexCoord");
+     divProgram.sampLoc     = gl.getUniformLocation(divProgram, "samp");
+     advecProgram.sampLoc   = gl.getUniformLocation(advecProgram, "samp");
+     densityProgram.sampLoc = gl.getUniformLocation(densityProgram, "samp");
 
-     prog_advec  = createProgram( shaders.advec_frag, shaders.vertex );
+     //enable vert arrays
+     gl.enableVertexAttribArray( advecProgram.aPosLoc );
+     gl.enableVertexAttribArray( advecProgram.aTextCoordLoc );
+
+     //set the starting force
+     gl.useProgram(forceProgram);
+     gl.uniform1f(forceProgram.forceLoc, .001*.5*-10 );
      
-     prog_p  = createProgram( shaders.density_frag, shaders.vertex );
+     gl.useProgram(divProgram);
+     gl.uniform1i(divProgram.sampLoc, 1);
+
      
-     prog_div  = createProgram( shaders.div_frag, shaders.vertex );
-     gl.useProgram(prog_div);
-     gl.uniform1i(gl.getUniformLocation(prog_div, "samp"), 1);
-
-     prog_show  = createProgram( shaders.render_frag, shaders.vertex );
-
-     gl.useProgram(prog_advec);
-     var aPosLoc = gl.getAttribLocation(prog_advec, "aPos");
-     var aTexLoc = gl.getAttribLocation(prog_advec, "aTexCoord");
-     gl.enableVertexAttribArray( aPosLoc );
-     gl.enableVertexAttribArray( aTexLoc );
-     var data = new Float32Array([-1,-1, 0,0,  1,-1, 1,0,  -1,1, 0,1,
-       1,1, 1,1]);
+     gl.useProgram(advecProgram);
+     
+     var aPosData = new Float32Array([-1,-1,  1,-1,  -1,1, 1,1]);
      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-     gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, gl.FALSE, 16, 0);
-     gl.vertexAttribPointer(aTexLoc, 2, gl.FLOAT, gl.FALSE, 16, 8);
-     gl.uniform1i(gl.getUniformLocation(prog_advec, "samp"), 1);
+     gl.bufferData(gl.ARRAY_BUFFER, aPosData, gl.STATIC_DRAW);
+     gl.vertexAttribPointer(advecProgram.aPosLoc, 2, gl.FLOAT, gl.FALSE, 8, 0);
 
-     var pixels = [],  h = 2/n, T;
+     var aTextureCoordData = new Float32Array([0,0, 1,0, 0,1, 1,1]);
+     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+     gl.bufferData(gl.ARRAY_BUFFER, aTextureCoordData, gl.STATIC_DRAW);
+
+     gl.vertexAttribPointer(advecProgram.aTextCoordLoc, 2, gl.FLOAT, gl.FALSE, 8, 0);
+     gl.uniform1i(advecProgram.sampLoc, 1);
+
+     var pixels = [], h = 2/n, density;
      for(var i = 0; i<n; i++)
-       for(var j = 0; j<n; j++){
-         var x = h*(j-n/2),  y = h*(i-n/2);
-         if (x*x + y*y > .2) T = 0; else T= -2;
-         pixels.push( 0, 0, T, 0 );
-       }
-     texture = gl.createTexture();
-     gl.activeTexture(gl.TEXTURE0);
-     gl.bindTexture(gl.TEXTURE_2D, texture);
-     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0,
-       gl.RGBA, gl.FLOAT, new Float32Array(pixels));
-     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+     for(var j = 0; j<n; j++){
+       var x = h*(j-n/2),  y = h*(i-n/2);
+       if (x*x + y*y > .02) density = 0; else density= 2;
+       // pixels.push( 0, 0, density, 0 );
+       pixels.push( 0, 0, 0, 0 );
+     }
 
      texture1 = gl.createTexture();
-     gl.activeTexture(gl.TEXTURE1);
+     gl.activeTexture(gl.TEXTURE0);
      gl.bindTexture(gl.TEXTURE_2D, texture1);
      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0,
-       gl.RGBA, gl.FLOAT, new Float32Array(pixels));
+     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0, gl.RGBA, gl.FLOAT, new Float32Array(pixels));
      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-     FBO = gl.createFramebuffer();
-     gl.bindFramebuffer(gl.FRAMEBUFFER, FBO);
-     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
-       gl.TEXTURE_2D, texture, 0);
-     if( gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE)
-       alert(err + "FLOAT as the color attachment to an FBO");
-     FBO1 = gl.createFramebuffer();
-     gl.bindFramebuffer(gl.FRAMEBUFFER, FBO1);
-     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
-         gl.TEXTURE_2D, texture1, 0);
+     texture2 = gl.createTexture();
+     gl.activeTexture(gl.TEXTURE1);
+     gl.bindTexture(gl.TEXTURE_2D, texture2);
+     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0, gl.RGBA, gl.FLOAT, new Float32Array(pixels));
+     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-     gl.useProgram(prog_p);
-     sampLoc  = gl.getUniformLocation(prog_p, "samp");
+     frameBuffer1 = gl.createFramebuffer();
+     gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer1);
+     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture1, 0);
+    
+    if( gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE)
+    alert(err + "FLOAT as the color attachment to an frameBuffer1");
 
-     timer = setInterval(fr, 500);
-     time = new Date().getTime();
-     animation = "animate";
-  //   draw();
+     frameBuffer2 = gl.createFramebuffer();
+     gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer2);
+     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture2, 0);
+
      anim();
-
   });
 }
 
+
+
 function draw(){
-   gl.bindFramebuffer(gl.FRAMEBUFFER, FBO1);
-   gl.useProgram(prog_force);
-   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer2);
+  gl.useProgram(forceProgram);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-   gl.bindFramebuffer(gl.FRAMEBUFFER, FBO);
-   gl.useProgram(prog_advec);
-   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer1);
+  gl.useProgram(advecProgram);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-   gl.useProgram(prog_p);
-   for(var i = 0; i < it; i++){
-    gl.uniform1i(sampLoc, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, FBO1);
+  gl.useProgram(densityProgram);
+  for(var i = 0; i < it; i++){
+    gl.uniform1i(densityProgram.sampLoc, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer2);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-    gl.uniform1i(sampLoc, 1);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, FBO);
+    gl.uniform1i(densityProgram.sampLoc, 1);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer1);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-   }
-   gl.uniform1i(sampLoc, 0);
-   gl.bindFramebuffer(gl.FRAMEBUFFER, FBO1);
-   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+  gl.uniform1i(densityProgram.sampLoc, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer2);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-   gl.bindFramebuffer(gl.FRAMEBUFFER, FBO);
-   gl.useProgram(prog_div);
-   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer1);
+  gl.useProgram(divProgram);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-   gl.useProgram(prog_show);
-   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-   frames++;
+  gl.useProgram(renderProgram);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
 }
 function anim(){
    draw();
-   switch ( animation ){
-     case "reset":
-      var pixels = [], T, h = 2/n;
-      for(var i = 0; i<n; i++)
-       for(var j = 0; j<n; j++){
-        var x = h*(j-n/2),  y = h*(i-n/2);
-        // if (x*x + y*y > .05) T = 0; else T= -2;
-        pixels.push( 0, 0, 0, 0 );
-       }
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0,
-       gl.RGBA, gl.FLOAT, new Float32Array(pixels));
-      
-      gl.bindTexture(gl.TEXTURE_2D, texture1);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0,
-       gl.RGBA, gl.FLOAT, new Float32Array(pixels));
-      animation = "animate";
-     case "animate":
-       if (delay == 0) requestAnimationFrame(anim);
-       else setTimeout("requestAnimationFrame(anim)", delay);
-       break;
-     case "stop":
-       break;
-   }
+   requestAnimationFrame(anim);
 }
-function run(v) {
-  if( animation == "animate" ){
-    animation = "stop";
-    document.getElementById('runBtn').value = "Run ";}
-  else{
-    animation = "animate";
-    document.getElementById('runBtn').value = "Stop";
-    anim();
-  }
-}
-function reset() {
-  if( animation == "stop" ){
-    animation = "reset";
-    document.getElementById('runBtn').value = "Stop";
-    anim();}
-  else animation = "reset";
-}
-function fr(){
-  var ti = new Date().getTime();
-  var fps = Math.round(1000*frames/(ti - time));
-  document.getElementById("framerate").value = fps;
-  frames = 0;  time = ti;
-}
-function setDelay(val) {
-  delay = parseInt(val);
-}
-function setIt(val) {
-  it = parseInt(val);
-}
-function setBu(v) {
-  var bu = v.valueOf();
-  gl.useProgram(prog_force);                //    c = dt*b/2
-  gl.uniform1f(gl.getUniformLocation(prog_force, "force"), .001*.5*bu );
-}
+
 
 function loadShaders( callback ) {
     var queue = 0;
@@ -246,7 +187,26 @@ function createProgram(fragmentSource, vertexSource) {
     return program;
 }
 
+window.addEventListener('mousemove', function(ev) {
+  var x = ev.clientX, y = ev.clientY;
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture( gl.TEXTURE_2D, texture1 );
+  var data = [];
+  for(var i=0; i<16; i++) {
+    data.push(0, 0, 2, 0);  
+  }
+  
+  if(512 - y < 0 || x < 0) return;
+  gl.texSubImage2D(
+            // target, detail level, x, y, width, height
+            gl.TEXTURE_2D, 0, x , 512 - y, 4, 4,
+            // data format, data type, pixels
+            gl.RGBA, gl.FLOAT, new Float32Array( data )
+        );
+});
 
+
+document.body.onload = init;
 
 // /*
 // ------------------------------------------------------------
