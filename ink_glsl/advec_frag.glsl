@@ -5,7 +5,11 @@ const float h = 1./512., dt = .001, tau = .5*dt/h, dt0 = dt*512.0;
 
 void main(void) {
   vec4 state = texture2D(samp, tc);
-  
+  //based on the velocity, look for an x y that comes from that velocity change.  
+  // float x = state.x * h, y = state.y * dt * h;
+
+
+  gl_FragColor = state;
 }
 
 
