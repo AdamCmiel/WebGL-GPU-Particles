@@ -13,8 +13,10 @@ void main(void) {
   vec4 down = a * texture2D(samp, vec2(tc.x, tc.y-h));
   vec4 left = a * texture2D(samp, vec2(tc.x-h, tc.y));
   vec4 right = a * texture2D(samp, vec2(tc.x+h, tc.y));
-
-  gl_FragColor = state + up + down + left + right - a*4.0*state;
+  
+  vec4 test = state + up + down + left + right - a*4.0*state;
+  test.y += 0.001;
+  gl_FragColor = test;
 }
 
 
