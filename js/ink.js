@@ -138,24 +138,24 @@ function draw(){
   gl.useProgram(advecProgram);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-  gl.useProgram(densityProgram);
-  for(var i = 0; i < it; i++){
-    gl.uniform1i(densityProgram.sampLoc, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer2);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  // gl.useProgram(densityProgram);
+  // for(var i = 0; i < it; i++){
+  //   gl.uniform1i(densityProgram.sampLoc, 0);
+  //   gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer2);
+  //   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-    gl.uniform1i(densityProgram.sampLoc, 1);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer1);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  }
+  //   gl.uniform1i(densityProgram.sampLoc, 1);
+  //   gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer1);
+  //   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  // }
 
-  gl.uniform1i(densityProgram.sampLoc, 0);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer2);
-  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  // gl.uniform1i(densityProgram.sampLoc, 0);
+  // gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer2);
+  // gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-  gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer1);
-  gl.useProgram(divProgram);
-  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  // gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer1);
+  // gl.useProgram(divProgram);
+  // gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
   gl.useProgram(renderProgram);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
