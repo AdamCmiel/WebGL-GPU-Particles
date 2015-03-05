@@ -1,0 +1,250 @@
+<html><head>
+<title>2D ink droplet</title>
+
+<script type="text/javascript">
+
+var gl, advecProgram, forceProgram, densityProgram, divProgram, prog_show,
+    frameBuffer1, frameBuffer2, texture, texture1,
+    timer, delay = 0, it = 10, frames = 0, time, animation,
+    n = 512, sampLoc;
+
+var ext;
+
+var shaders = {
+  advec_frag: '',
+  density_frag: '',
+  div_frag: '',
+  force_frag: '',
+  render_frag: '',
+  vertex: ''
+};
+
+function main() {
+
+  loadShaders(function() {
+
+    var canvas = document.getElementById("canvas");
+    var err = "Your browser does not support ";
+    gl = canvas.getContext("webgl");
+    ext = gl.getExtension("OES_texture_float");
+    
+    if (!gl || !ext) {
+      alert(err+"WebGL. See http://get.webgl.org");
+      return;
+    }
+
+     forceProgram = createProgram(shaders.force_frag, shaders.vertex);
+     densityProgram  = createProgram( shaders.density_frag, shaders.vertex );
+     divProgram  = createProgram( shaders.div_frag, shaders.vertex );
+     prog_show  = createProgram( shaders.render_frag, shaders.vertex );
+     advecProgram  = createProgram( shaders.advec_frag, shaders.vertex );
+
+     //get uniforms
+     forceProgram.forceLoc = gl.getUniformLocation(forceProgram, "force");
+     densityProgram.sampLoc = gl.getUniformLocation(densityProgram, "samp");
+     divProgram.sampLoc = gl.getUniformLocation(divProgram, "samp");
+     advecProgram.aPosLoc = gl.getAttribLocation(advecProgram, "aPos");
+     advecProgram.aTextCoordLoc = gl.getAttribLocation(advecProgram, "aTexCoord");
+     advecProgram.sampLoc = gl.getUniformLocation(advecProgram, "samp");
+
+     //enable vert arrays
+     gl.enableVertexAttribArray( advecProgram.aPosLoc );
+     gl.enableVertexAttribArray( advecProgram.aTextCoordLoc );
+
+
+     gl.useProgram(forceProgram);
+     gl.uniform1f(forceProgram.forceLoc, .001*.5*2 );
+     
+     gl.useProgram(divProgram);
+     gl.uniform1i(divProgram.sampLoc, 1);
+
+     
+     gl.useProgram(advecProgram);
+     
+     var aPosData = new Float32Array([-1,-1,  1,-1,  -1,1, 1,1]);
+     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+     gl.bufferData(gl.ARRAY_BUFFER, aPosData, gl.STATIC_DRAW);
+     gl.vertexAttribPointer(advecProgram.aPosLoc, 2, gl.FLOAT, gl.FALSE, 8, 0);
+
+     var aTextureCoordData = new Float32Array([0,0, 1,0, 0,1, 1,1]);
+     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+     gl.bufferData(gl.ARRAY_BUFFER, aTextureCoordData, gl.STATIC_DRAW);
+
+     gl.vertexAttribPointer(advecProgram.aTextCoordLoc, 2, gl.FLOAT, gl.FALSE, 8, 0);
+     gl.uniform1i(advecProgram.sampLoc, 1);
+
+     var pixels = [], h = 2/n, T;
+     for(var i = 0; i<n; i++)
+     for(var j = 0; j<n; j++){
+       var x = h*(j-n/2),  y = h*(i-n/2) - 0.7;
+       if (x*x + y*y > .01) T = 0; else T= -2;
+       pixels.push( 0, 0, T, 0 );
+     }
+
+     texture = gl.createTexture();
+     gl.activeTexture(gl.TEXTURE0);
+     gl.bindTexture(gl.TEXTURE_2D, texture);
+     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0,
+       gl.RGBA, gl.FLOAT, new Float32Array(pixels));
+     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+     texture1 = gl.createTexture();
+     gl.activeTexture(gl.TEXTURE1);
+     gl.bindTexture(gl.TEXTURE_2D, texture1);
+     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, n, 0,
+       gl.RGBA, gl.FLOAT, new Float32Array(pixels));
+     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+     frameBuffer1 = gl.createFramebuffer();
+     gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer1);
+     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+       gl.TEXTURE_2D, texture, 0);
+     if( gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE)
+       alert(err + "FLOAT as the color attachment to an frameBuffer1");
+     frameBuffer2 = gl.createFramebuffer();
+     gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer2);
+     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+         gl.TEXTURE_2D, texture1, 0);
+
+     timer = setInterval(fr, 500);
+     time = new Date().getTime();
+     animation = "animate";
+  //   draw();
+     anim();
+
+  });
+}
+function draw(){
+   gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer2);
+   gl.useProgram(forceProgram);
+   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+   gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer1);
+   gl.useProgram(advecProgram);
+   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+   gl.useProgram(densityProgram);
+   for(var i = 0; i < it; i++){
+    gl.uniform1i(densityProgram.sampLoc, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer2);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    gl.uniform1i(densityProgram.sampLoc, 1);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer1);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+   }
+   gl.uniform1i(densityProgram.sampLoc, 0);
+   gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer2);
+   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+   gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer1);
+   gl.useProgram(divProgram);
+   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+   gl.useProgram(prog_show);
+   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+   frames++;
+}
+function anim(){
+   draw();
+   switch ( animation ){
+     case "animate":
+       if (delay == 0) requestAnimationFrame(anim);
+       else setTimeout("requestAnimationFrame(anim)", delay);
+       break;
+     case "stop":
+       break;
+   }
+}
+function run(v) {
+  if( animation == "animate" ){
+    animation = "stop";
+    document.getElementById('runBtn').value = "Run ";}
+  else{
+    animation = "animate";
+    document.getElementById('runBtn').value = "Stop";
+    anim();
+  }
+}
+function reset() {
+  if( animation == "stop" ){
+    animation = "reset";
+    document.getElementById('runBtn').value = "Stop";
+    anim();}
+  else animation = "reset";
+}
+function fr(){
+  var ti = new Date().getTime();
+  var fps = Math.round(1000*frames/(ti - time));
+  document.getElementById("framerate").value = fps;
+  frames = 0;  time = ti;
+}
+function setDelay(val) {
+  delay = parseInt(val);
+}
+function setIt(val) {
+  it = parseInt(val);
+}
+
+function setBu(v) {
+  var bu = v.valueOf();
+  gl.useProgram(forceProgram);                //    c = dt*b/2
+  gl.uniform1f(gl.getUniformLocation(forceProgram, "force"), .001*.5*bu );
+}
+
+function loadShaders( callback ) {
+    var queue = 0;
+    function loadHandler( name, req ) {
+        return function() {
+            shaders[ name ] = req.responseText;
+            if ( --queue <= 0 ) callback();
+        };
+    }
+    for ( var name in shaders ) {
+        queue++;
+        var req = new XMLHttpRequest();
+        req.onload = loadHandler( name, req );
+        req.open( 'get', 'ink_glsl/' + name + '.glsl', true );
+        req.send();
+    }
+}
+
+function createShader( source, type ) {
+    var shader = gl.createShader( type );
+    gl.shaderSource( shader, source );
+    gl.compileShader( shader );
+    if ( !gl.getShaderParameter( shader, gl.COMPILE_STATUS ) )
+        throw gl.getShaderInfoLog( shader );
+    return shader;
+}
+
+function createProgram(fragmentSource, vertexSource) {
+    var vs = createShader( vertexSource, gl.VERTEX_SHADER );
+    var fs = createShader( fragmentSource, gl.FRAGMENT_SHADER );
+    var program = gl.createProgram();
+    gl.attachShader( program, vs );
+    gl.attachShader( program, fs );
+    gl.linkProgram( program );
+    if ( !gl.getProgramParameter( program, gl.LINK_STATUS ) )
+        throw gl.getProgramInfoLog( program );
+    return program;
+}
+
+</script>
+</head>
+<body onload="main()">
+
+<canvas id="canvas" width="512" height="512"></canvas>
+<br><button onclick="reset()">Reset</button>
+<input type="button" onclick="run()" value="Stop" size="1" id="runBtn">
+&beta;<input size="2" value="10" onchange="setBu( this.value )">
+It<input size="1" value="10" onchange="setIt( this.value )">
+delay<input size="1" value="0" onchange="setDelay( this.value )">
+fps<input size="1" id="framerate">
+</body>
+</html>

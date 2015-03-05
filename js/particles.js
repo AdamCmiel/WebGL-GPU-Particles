@@ -378,30 +378,6 @@ gl.setup = function() {
         gl.useProgram( debugProgram );
         gl.uniform1i( debugProgram.uParticleDataLoc, 0 );
 
-        // Enable LEAP motion if detected
-        if ( Leap ) {
-
-            Leap.loop( function( frame ) {
-
-                var fingers = frame.pointables;
-                var finger;
-
-                for ( var i = 0, n = fingers.length; i < n; i++ ) {
-
-                    finger = fingers[i];
-
-                    emitParticles( random( 110, 200 ), {
-                        x: finger.tipPosition.x / 200,
-                        y: (finger.tipPosition.y / 200) - 1,
-                        z: (finger.tipPosition.z / 400) * -1
-                    },{
-                        x: finger.tipVelocity.x / 100,
-                        y: finger.tipVelocity.y / 120,
-                        z: finger.tipVelocity.z / 180
-                    });
-                }
-            });
-        }
 
         // Kick it off!
         gl.start();
