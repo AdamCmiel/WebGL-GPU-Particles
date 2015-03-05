@@ -323,6 +323,7 @@ gl.setup = function() {
         for ( var i = 0, u = 0, v = 1; i < PARTICLE_COUNT; i++, u = i * 2, v = u + 1 ) {
             particleUVData[ u ] = interval * ~~( i % PARTICLE_COUNT_SQRT ); // u
             particleUVData[ v ] = interval * ~~( i / PARTICLE_COUNT_SQRT ); // v
+            console.log('particle u', particleUVData[u], 'particle v', particleUVData[v]);
         }
 
         // Buffer in the particle UV data for the render program

@@ -11,8 +11,6 @@ void main(void) {
   // not too different here. 
   vec4 below = texture2D(samp, vec2(tc.x, tc.y + h));
   t.y -= force * (t.z + below.z);
-  // t.y += 0.1;
-  // t.y -= force * t.z * 2.0;
-
+  
   gl_FragColor = t;
 }
